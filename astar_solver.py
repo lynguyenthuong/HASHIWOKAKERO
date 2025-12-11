@@ -393,10 +393,6 @@ class AStarSolver:
                     h_val = self._compute_heuristic(prop_true)
                     heapq.heappush(open_list, (new_g + h_val, new_g, next(counter), prop_true))
 
-                # Timeout guard (ví dụ: > 20000 nodes thì dừng để demo)
-                if self.nodes_expanded > 50000:
-                    return None
-
             return None # No solution found
 
         except Exception as e:
