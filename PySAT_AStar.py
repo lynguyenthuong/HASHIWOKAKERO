@@ -8,19 +8,14 @@ from collections import defaultdict
 from pysat.formula import CNF
 from pysat.solvers import Glucose3
 
-# ==========================================
-# 1. CẤU TRÚC DỮ LIỆU CƠ BẢN & INPUT (SHARED)
-# ==========================================
-
+### CẤU TRÚC DỮ LIỆU CƠ BẢN & INPUT (SHARED)
 class Grid:
-    """Đại diện cho lưới bài toán Hashi"""
     def __init__(self, width: int, height: int, data: List[List[Any]]):
         self.width = width
         self.height = height
-        self.data = data # Ma trận 2D chứa số (đảo) và 0 (nước)
+        self.data = data #
 
 def read_grid_from_file(file_path: str) -> Optional[Grid]:
-    """Đọc file input trả về đối tượng Grid"""
     try:
         matrix = []
         with open(file_path, 'r', encoding='utf-8') as f:
@@ -36,47 +31,23 @@ def read_grid_from_file(file_path: str) -> Optional[Grid]:
         return None
 
 def format_solution_output(grid: Grid, solution_edges: List[dict]):
-    """
-    Tạo output dạng text/string chuẩn form list of lists string.
-    Dùng chung cho cả PySAT và A* để xuất ra file/màn hình.
-    """
     rows = grid.height
     cols = grid.width
-    # Tạo lưới output chứa string
     out_grid = [["0" for _ in range(cols)] for _ in range(rows)]
     
-    # Điền số đảo
-    # Cần tìm lại vị trí đảo từ grid gốc
     for r in range(rows):
         for c in range(cols):
             if grid.data[r][c] > 0:
                 out_grid[r][c] = str(grid.data[r][c])
-        
-    # Điền cầu từ solution
+
     for edge in solution_edges:
-        # edge format: {'u': (c, r), 'v': (c, r), 'bridges': int, 'dir': 'h'/'v', ...}
-        # Lưu ý: Cấu trúc edge của PySAT và A* hơi khác nhau ở bước này, 
-        # ta sẽ chuẩn hóa khi gọi hàm này.
-        
-        # Lấy thông tin tọa độ
-        if 'info' in edge: # Dạng từ PySAT (helper_01)
-            u_r, u_c = edge['info']['r'], edge['info']['c_min'] # Cẩn thận logic này
-            # Logic PySAT lưu u, v index. Ta dùng logic vẽ lại dựa trên tọa độ thực
-            # Để đơn giản, ta dùng logic vẽ tổng quát bên dưới:
+        if 'info' in edge: 
+            u_r, u_c = edge['info']['r'], edge['info']['c_min'] 
             pass
-            
-    # --- Logic vẽ lại tổng quát ---
-    # Input solution_edges cần có: u=(c,r), v=(c,r), bridges, type/dir
+
     for edge in solution_edges:
         bridges = edge['bridges']
-        
-        # Xác định tọa độ u, v
-        # PySAT trả về u, v là index -> cần map sang tọa độ
-        # A* trả về u, v là tuple (c, r)
-        
-        # Để hàm này chạy đúng, ta quy ước solution_edges truyền vào 
-        # phải có dạng chuẩn: {'u': (c1, r1), 'v': (c2, r2), 'bridges': int}
-        
+
         c1, r1 = edge['u']
         c2, r2 = edge['v']
         
@@ -96,12 +67,9 @@ def format_solution_output(grid: Grid, solution_edges: List[dict]):
 
     return out_grid
 
-# ==========================================
-# 2. GENERATOR & CNF ENCODING (STEPS 1, 2, 3)
-# ==========================================
-
+### GENERATOR & CNF ENCODING
+# Class sinh biến và mệnh đề CNF (Dùng chung cho cả PySAT và A*)
 class HashiCNFGenerator:
-    """Class sinh biến và mệnh đề CNF (Dùng chung cho cả PySAT và A*)"""
     def __init__(self, grid_data):
         self.grid = grid_data
         self.rows = len(grid_data)
@@ -177,8 +145,8 @@ class HashiCNFGenerator:
         if u_idx > v_idx: u_idx, v_idx = v_idx, u_idx
         return self.var_map.get((u_idx, v_idx, k))
 
+    # Hàm sinh tất cả các ràng buộc tĩnh (Consistency, Crossing, Capacity).
     def generate_initial_cnf(self):
-        """Sinh tất cả các ràng buộc tĩnh (Consistency, Crossing, Capacity)."""
         self.clauses = []
         self._gen_consistency()
         self._gen_no_crossing()
@@ -232,8 +200,8 @@ class HashiCNFGenerator:
                 for combination in itertools.combinations(neighbor_vars, subset_size_at_most):
                     self.clauses.append([-x for x in combination])
 
+    # Chuyển model PySAT thành danh sách cạnh chuẩn để vẽ
     def decode_solution_to_edges(self, model):
-        """Chuyển model PySAT thành danh sách cạnh chuẩn để vẽ"""
         active_edges = []
         if model is None: return []
         model_set = set(model)
@@ -254,10 +222,7 @@ class HashiCNFGenerator:
                 active_edges.append({'u': u_coords, 'v': v_coords, 'bridges': bridges})
         return active_edges
 
-# ==========================================
-# 3. GIẢI BẰNG PYSAT (STEP 4)
-# ==========================================
-
+### GIẢI BẰNG PYSAT 
 def check_connectivity_bfs(islands, active_edges_indices):
     """BFS kiểm tra liên thông dựa trên index đảo"""
     if not islands: return True, []
@@ -282,10 +247,6 @@ def check_connectivity_bfs(islands, active_edges_indices):
         return False, list(visited)
 
 def run_pysat(grid: Grid):
-    """
-    Hàm chính chạy Step 4: Giải bằng Glucose3 + Lazy Constraints
-    Trả về: List các chuỗi (dòng) để ghi file output hoặc in ra
-    """
     generator = HashiCNFGenerator(grid.data)
     clauses = generator.generate_initial_cnf()
     
@@ -303,7 +264,7 @@ def run_pysat(grid: Grid):
         
         model = solver.get_model()
         
-        # 1. Decode ra danh sách cạnh (dùng index để check liên thông)
+        # Decode ra danh sách cạnh (dùng index để check liên thông)
         active_edges_indices = []
         model_set = set(model)
         for edge in generator.potential_edges:
@@ -311,7 +272,7 @@ def run_pysat(grid: Grid):
             if generator.get_var(u, v, 1) in model_set:
                 active_edges_indices.append({'u': u, 'v': v})
         
-        # 2. Kiểm tra liên thông
+        # Kiểm tra liên thông
         is_connected, visited_group = check_connectivity_bfs(generator.islands, active_edges_indices)
         
         if is_connected:
@@ -320,7 +281,7 @@ def run_pysat(grid: Grid):
             out_grid = format_solution_output(grid, solution_edges)
             return out_grid
         
-        # 3. Thêm Lazy Constraint (Cut-set)
+        # Thêm Lazy Constraint (Cut-set)
         visited_set = set(visited_group)
         cut_clause = []
         for edge in generator.potential_edges:
@@ -334,28 +295,21 @@ def run_pysat(grid: Grid):
         
         solver.add_clause(cut_clause)
 
-# ==========================================
-# 4. GIẢI BẰNG A* (STEP 5)
-# ==========================================
-
+### GIẢI BẰNG A*
 class BridgeVar:
-    """Helper class cho A*"""
     def __init__(self, id, u, v, idx, direction):
         self.id, self.u, self.v, self.idx, self.direction = id, u, v, idx, direction
 
+# Class tiền xử lý cho A* để giảm không gian tìm kiếm
 class HashiPreprocessor:
-    """Class tiền xử lý cho A* để giảm không gian tìm kiếm"""
     def __init__(self, grid_data, islands):
         self.grid = grid_data
         self.rows = len(grid_data)
         self.cols = len(grid_data[0])
         self.island_map = {(isl['r'], isl['c']): isl for isl in islands}
         self.islands_list = islands
-        # Trạng thái hiện tại
         self.rem_cap = {(isl['r'], isl['c']): isl['val'] for isl in islands}
-        # Lưu các cầu đã fix: {(u_id, v_id): count}
         self.bridges = {}
-        # Cache láng giềng
         self.neighbors = self._find_all_neighbors()
         self.id_to_coords = {isl['id']: (isl['r'], isl['c']) for isl in islands}
 
@@ -407,9 +361,7 @@ class HashiPreprocessor:
         while changed and loops < 100:
             changed = False
             loops += 1
-            
-            # Copy danh sách để duyệt an toàn
-            # Logic: Duyệt qua các đảo, kiểm tra láng giềng, áp dụng luật
+
             current_islands = list(self.islands_list)
             for isl in current_islands:
                 uid = isl['id']
@@ -458,8 +410,8 @@ class HashiPreprocessor:
                                 
         return self.bridges
 
+# Class giải A* sử dụng MCI Heuristic trên CNF
 class AStarSolver:
-    """Class giải A* sử dụng MCI Heuristic trên CNF (Logic đầy đủ)"""
     def __init__(self, grid: Grid):
         self.grid = grid
         self.generator = None
@@ -471,8 +423,8 @@ class AStarSolver:
         self.island_edge_map = defaultdict(list)
         self.nodes_expanded = 0
 
+    # Map variables và tạo cấu trúc dữ liệu cho MCI.
     def _setup_variables(self):
-        """Map variables và tạo cấu trúc dữ liệu cho MCI."""
         self.island_edge_map = defaultdict(list) 
 
         for var_id, info in self.generator.reverse_map.items():
@@ -499,8 +451,8 @@ class AStarSolver:
                 self.island_edge_map[bvar.u].append(idx)
                 self.island_edge_map[bvar.v].append(idx)
 
+    # Đếm số mệnh đề chưa thỏa mãn.
     def _compute_heuristic(self, assignment):
-        """Đếm số mệnh đề chưa thỏa mãn."""
         h = 0
         for clause in self.cnf.clauses:
             clause_sat = False
@@ -558,8 +510,8 @@ class AStarSolver:
                         changed = True
         return assignment
 
+    # Heuristic MCI: Chọn biến thuộc về đảo khó thỏa mãn nhất
     def _get_mci_variable(self, assignment):
-        """Heuristic MCI: Chọn biến thuộc về đảo khó thỏa mãn nhất"""
         best_island_vars = None
         min_gap = float('inf')
         found_candidate = False
@@ -660,12 +612,12 @@ class AStarSolver:
 
     def solve(self):
         try:
-            # 1. Initialize & Preprocess
+            # Initialize & Preprocess
             self.generator = HashiCNFGenerator(self.grid.data)
             preprocessor = HashiPreprocessor(self.grid.data, self.generator.islands)
             fixed_bridges = preprocessor.run()
             
-            # 2. Generate CNF
+            # Generate CNF
             self.cnf.extend(self.generator.generate_initial_cnf())
             for (u, v), count in fixed_bridges.items():
                 var1 = self.generator.get_var(u, v, 1)
@@ -674,16 +626,15 @@ class AStarSolver:
                     var2 = self.generator.get_var(u, v, 2)
                     if var2: self.cnf.append([var2])
 
-            # 3. Setup Variables
+            # Setup Variables
             self._setup_variables()
 
-            # Initial Unit Propagation
             initial_assignment = [None] * len(self.all_vars)
             initial_assignment = self._unit_propagate(initial_assignment)
             
             if initial_assignment is None: return None
 
-            # 4. A* Search
+            # A* Search
             h_initial = self._compute_heuristic(initial_assignment)
             g_initial = 0
             f_initial = g_initial + h_initial
@@ -700,7 +651,6 @@ class AStarSolver:
 
                 if var_idx is None:
                     if self._check_full_assignment(assignment):
-                        # Found Logic Model -> Convert to Graph Model -> Check Validity
                         model = []
                         for var, idx in self.var_index_map.items():
                             if assignment[idx] is True: model.append(var)
@@ -709,11 +659,9 @@ class AStarSolver:
                         if self._validate_solution_degree(model):
                             sol = self._extract_solution_edges(model)
                             if self._check_connectivity_astar(sol):
-                                # Trả về format Grid để in
                                 return format_solution_output(self.grid, sol)
                     continue
 
-                # Branching
                 new_g = g + 1
                 
                 # Branch False
@@ -744,22 +692,15 @@ class AStarSolver:
 
 def run_astar(grid: Grid):
     solver = AStarSolver(grid)
-    # Gọi hàm solve thực sự
     result = solver.solve()
     return result
 
-
-# ==========================================
-# 5. CÁC HÀM WRAPPER (IO & TIMING) - Thêm vào cuối file
-# ==========================================
-
+### CÁC HÀM WRAPPER (IO & TIMING)
 def write_solution_to_file(data, filepath):
-    """Ghi dữ liệu grid (list of lists string) vào file"""
     try:
         with open(filepath, "w") as f:
             if data:
                 for row in data:
-                    # Format chuẩn JSON-like: ["1", "0", "="]
                     f.write(str(row).replace("'", '"') + "\n")
             else:
                 f.write("NO SOLUTION FOUND / UNSAT\n")
@@ -767,7 +708,6 @@ def write_solution_to_file(data, filepath):
         print(f"Lỗi khi ghi file {filepath}: {e}")
 
 def run_pysat_solver(input_path, output_path):
-    """Wrapper chạy PySAT: Đọc -> Giải -> Đo giờ -> Ghi file"""
     try:
         grid = read_grid_from_file(input_path)
         if not grid: return None
@@ -783,13 +723,12 @@ def run_pysat_solver(input_path, output_path):
         return None
 
 def run_astar_solver(input_path, output_path):
-    """Wrapper chạy A*: Đọc -> Giải -> Đo giờ -> Ghi file"""
     try:
         grid = read_grid_from_file(input_path)
         if not grid: return None
         
         start = time.time()
-        result_grid = run_astar(grid) # Hàm này cần bạn đã paste code A* đầy đủ vào class AStarSolver
+        result_grid = run_astar(grid)
         duration = time.time() - start
         
         write_solution_to_file(result_grid, output_path)
